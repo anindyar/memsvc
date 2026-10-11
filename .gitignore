@@ -1,0 +1,5 @@
+memory/
+gateway.log
+gateway.pid
+e2e_result.txt
+__pycache__/

@@ -1,0 +1,65 @@
+# AI platform team kit: agentgateway 1.5 as the single front door for inference, tools and memory.
+# One API key per team scopes all three planes.
+config:
+  adminAddr: 127.0.0.1:15200
+  statsAddr: 0.0.0.0:15220
+  readinessAddr: 0.0.0.0:15221
+  # Request logs (who called which model, status, tokens) go to the same Postgres.
+  database:
+    url: postgresql://postgres:pgkit@127.0.0.1:5441/agwlogs
+
+gateways:
+  default:
+    port: 8031
+    protocol: HTTP
+
+llm:
+  policies:
+    # One API key per team. The same keys are reused for MCP below (YAML anchor).
+    apiKey: &teamKeys
+      mode: strict
+      keys:
+      - key: sk-alpha-demo
+        metadata: { team: alpha }
+      - key: sk-beta-demo
+        metadata: { team: beta }
+      - key: sk-memsvc-demo          # the memory service's own key, used only for embeddings
+        metadata: { team: platform }
+
+  # Teams call stable aliases. Each alias points at whatever backend serves it today;
+  # swapping the backend model is a one-line change here, with no client changes.
+  # BACKENDS: replace baseUrl/model with your own OpenAI-compatible servers (vLLM, TGI, Ollama, a cloud API).
+  models:
+  - name: chat-general            # example backend: gpt-oss-20b on vLLM
+    provider: { custom: { formats: [ { type: completions } ] } }
+    params: { apiKey: dummy, model: gpt-oss-20b, baseUrl: "http://127.0.0.1:8000" }
+    authorization:
+      rules: [ 'apiKey.team == "alpha"' ]
+  - name: chat-vision             # example backend: a 27B vision-language model on vLLM
+    provider: { custom: { formats: [ { type: completions } ] } }
+    params: { apiKey: dummy, model: medgemma-27b-it, baseUrl: "http://127.0.0.1:8001" }
+    authorization:
+      rules: [ 'apiKey.team == "beta"' ]
+  - name: embed                   # embeddings plane, example backend: nomic-embed-text on Ollama (768-dim)
+    provider: { custom: { formats: [ { type: embeddings } ] } }
+    params: { apiKey: dummy, model: nomic-embed-text, baseUrl: "http://127.0.0.1:11434" }
+    authorization:
+      rules: [ 'apiKey.team in ["alpha", "beta", "platform"]' ]
+
+mcp:
+  targets:
+  - name: memory
+    mcp: { host: "http://127.0.0.1:8041/mcp" }
+  policies:
+    apiKey: *teamKeys
+    # Stamp the caller's team on every request to the memory service (overrides anything the client sent).
+    transformations:
+      request:
+        set:
+          x-team: 'apiKey.team'
+    mcpAuthorization:
+      rules:
+      - 'apiKey.team == "alpha"'                                                                   # alpha: all memory tools
+      - 'apiKey.team == "beta" && mcp.tool.name in ["memory_search", "memory_get", "memory_write"]' # beta: no forget/reindex
+
+ui: {}
