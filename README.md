@@ -35,6 +35,16 @@ client ──(team API key)──▶ agentgateway ──(sets X-Team from the ke
 
 **Trust boundary.** memsvc trusts the `X-Team` header, so **only the gateway may be able to reach it.** The reference setup binds it to `127.0.0.1`. On Kubernetes, use a ClusterIP Service and a NetworkPolicy that admits only the gateway pods.
 
+## Container image
+
+Multi-arch (amd64 + arm64), built from `main` by GitHub Actions:
+
+```bash
+docker pull ghcr.io/anindyar/memsvc:latest
+```
+
+The image runs as uid 10001, listens on `HOST`/`PORT`, and keeps md-mode files in `/srv/memory`. For a full stack (gateway, pgvector, memsvc, example models) in one Docker Compose file or one Kubernetes manifest, see [tenantfabric](https://github.com/anindyar/tenantfabric).
+
 ## Quick start (single host, reference setup)
 
 Requirements: Docker, [agentgateway](https://github.com/agentgateway/agentgateway) 1.5+ on `PATH`, an OpenAI-compatible embedding server (the example uses Ollama with `nomic-embed-text`, 768-dim), and OpenAI-compatible chat backends if you want to run the inference checks.
